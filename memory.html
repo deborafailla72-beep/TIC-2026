@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Memory Europa: bandiere e monete</title>
+<style>
+:root{--bg:#f4f6fb;--fg:#1b2333;--card:#ffffff;--back:#2f5bd8;--back2:#1d3fa3;--ok:#1f9d55;--okbg:#e3f6ea;--muted:#5b6578;--line:#d8deea;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1420;--fg:#e8ecf5;--card:#1a2233;--back:#3b6cf0;--back2:#2447b5;--ok:#4cd286;--okbg:#14352a;--muted:#9aa5bb;--line:#2a3550}}
+:root[data-theme="dark"]{--bg:#0f1420;--fg:#e8ecf5;--card:#1a2233;--back:#3b6cf0;--back2:#2447b5;--ok:#4cd286;--okbg:#14352a;--muted:#9aa5bb;--line:#2a3550}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100vh}
+main{max-width:760px;margin:0 auto;padding:18px 14px 30px}
+h1{font-size:1.5rem;margin:0 0 4px}
+p.sub{margin:0 0 14px;color:var(--muted);font-size:.95rem}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 12px;font-size:.9rem}
+.stat b{font-variant-numeric:tabular-nums}
+select,button{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:7px 12px;cursor:pointer}
+button.primary{background:var(--back);color:#fff;border-color:var(--back)}
+.grid{display:grid;gap:10px;grid-template-columns:repeat(4,1fr);margin:0 auto}
+.grid.c5{grid-template-columns:repeat(5,1fr)}
+@media (max-width:520px){.grid.c5{grid-template-columns:repeat(4,1fr)}}
+.card{perspective:700px;aspect-ratio:3/4;border:0;padding:0;background:none;touch-action:manipulation}
+.in{position:relative;width:100%;height:100%;transition:transform .45s;transform-style:preserve-3d}
+.card.on .in{transform:rotateY(180deg)}
+.f{position:absolute;inset:0;-webkit-backface-visibility:hidden;backface-visibility:hidden;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:6px;border:1px solid var(--line)}
+.back{background:linear-gradient(135deg,var(--back),var(--back2));color:#fff;font-size:1.8rem;border:0}
+.front{background:var(--card);transform:rotateY(180deg)}
+.card.done .front{background:var(--okbg);border-color:var(--ok)}
+.flag svg{display:block;width:100%;max-width:86px;height:auto;border:1px solid var(--line);border-radius:3px}
+.name{font-size:.78rem;font-weight:600;margin-top:6px}
+.sym{font-size:clamp(1.6rem,7vw,2.4rem);font-weight:700;color:var(--back)}
+.cur{font-size:.78rem;font-weight:600;margin-top:4px}
+.msg{margin-top:16px;padding:14px;border-radius:12px;background:var(--okbg);border:1px solid var(--ok);display:none}
+.msg.show{display:block}
+.note{margin-top:14px;font-size:.8rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+<h1>Memory Europa</h1>
+<p class="sub">Abbina ogni bandiera alla moneta del suo paese.</p>
+<div class="bar">
+<select id="lvl" aria-label="Difficoltà">
+<option value="6">Facile (6 coppie)</option>
+<option value="8" selected>Medio (8 coppie)</option>
+<option value="10">Difficile (10 coppie)</option>
+</select>
+<button class="primary" id="new">Nuova partita</button>
+<span class="stat">Mosse: <b id="mv">0</b></span>
+<span class="stat">Tempo: <b id="tm">0:00</b></span>
+<span class="stat">Record: <b id="best">–</b></span>
+</div>
+<div class="grid" id="grid"></div>
+<div class="msg" id="msg" role="status"></div>
+
+</main>
+<script>
+const S=x=>'<svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg" role="img">'+x+'</svg>';
+const R=(x,y,w,h,c)=>'<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" fill="'+c+'"/>';
+const C=(bg,c1,c2,x,w,iw)=>R(0,0,30,20,bg)+R(x,0,w,20,c1)+R(0,10-w/2,30,w,c1)+(c2?R(x+(w-iw)/2,0,iw,20,c2)+R(0,10-iw/2,30,iw,c2):'');
+const D='<path d="M0 0L30 20M30 0L0 20" stroke="';
+/* Bosnia: stelle nel campo blu, lungo il lato lungo del triangolo giallo */
+const stars=[0,1,2,3,4,5,6].map(i=>'<circle cx="'+(6.2+i*2.5)+'" cy="'+(3.8+i*2.5)+'" r=".9" fill="#fff"/>').join('');
+const P=[
+[S(C('#006AA7','#FECC02',null,8,4)),"Svezia","kr","Corona svedese"],
+[S(C('#BA0C2F','#fff','#00205B',7,6,3)),"Norvegia","kr","Corona norvegese"],
+[S(C('#C8102E','#fff',null,8,4)),"Danimarca","kr","Corona danese"],
+[S(C('#02529C','#fff','#DC1E35',7,4,2)),"Islanda","kr","Corona islandese"],
+[S(R(0,0,30,20,'#D52B1E')+R(12.5,4.5,5,11,'#fff')+R(9.5,7.5,11,5,'#fff')),"Svizzera","CHF","Franco svizzero"],
+[S(R(0,0,30,20,'#012169')+D+'#fff" stroke-width="4"/>'+D+'#C8102E" stroke-width="1.4"/>'+R(12,0,6,20,'#fff')+R(0,7,30,6,'#fff')+R(13,0,4,20,'#C8102E')+R(0,8,30,4,'#C8102E')),"Regno Unito","£","Sterlina"],
+[S(R(0,0,30,10,'#fff')+R(0,10,30,10,'#DC143C')),"Polonia","zł","Złoty"],
+[S(R(0,0,30,10,'#fff')+R(0,10,30,10,'#D7141A')+'<path d="M0 0L15 10L0 20Z" fill="#11457E"/>'),"Rep. Ceca","Kč","Corona ceca"],
+[S(R(0,0,30,7,'#CE2939')+R(0,7,30,6,'#fff')+R(0,13,30,7,'#477050')),"Ungheria","Ft","Fiorino"],
+[S(R(0,0,10,20,'#002B7F')+R(10,0,10,20,'#FCD116')+R(20,0,10,20,'#CE1126')),"Romania","lei","Leu romeno"],
+[S(R(0,0,30,10,'#0057B7')+R(0,10,30,10,'#FFD700')),"Ucraina","₴","Grivnia"],
+[S(R(0,0,30,20,'#002F6C')+'<path d="M5 0H25V20Z" fill="#FECB00"/>'+stars),"Bosnia ed Erzegovina","KM","Marco convertibile"]
+];
+const grid=document.getElementById("grid"),mvE=document.getElementById("mv"),tmE=document.getElementById("tm"),bestE=document.getElementById("best"),msg=document.getElementById("msg"),lvl=document.getElementById("lvl");
+let first=null,lock=false,moves=0,found=0,total=0,t0=0,timer=null;
+/* record per livello, ricordato su questo dispositivo */
+const RK="memory_europa_record";let best={};
+try{const v=JSON.parse(localStorage.getItem(RK));if(v&&typeof v==="object")best=v}catch(e){}
+/* nome della carta per i lettori di schermo */
+function lab(b,t){b.setAttribute("aria-label",t)}
+/* rimpicciolisce la griglia quanto basta perché tutte le carte stiano nello schermo senza scorrere */
+function fit(){
+grid.style.maxWidth="";
+if(!innerHeight)return;
+const c=getComputedStyle(grid).gridTemplateColumns.split(" ").length,r=Math.ceil(grid.children.length/c);
+const avail=innerHeight-(grid.getBoundingClientRect().top+scrollY)-16;
+const cw=Math.max(80,((avail-(r-1)*10)*3/4)/r);
+grid.style.maxWidth=Math.round(c*cw+(c-1)*10)+"px";
+}
+addEventListener("resize",fit);
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function fmt(s){return Math.floor(s/60)+":"+String(s%60).padStart(2,"0")}
+function start(){
+clearInterval(timer);timer=null;first=null;lock=false;moves=0;found=0;t0=0;
+mvE.textContent=0;tmE.textContent="0:00";msg.className="msg";
+const n=+lvl.value;total=n;
+bestE.textContent=best[n]?best[n]+" mosse":"–";
+grid.className="grid"+(n===10?" c5":"");
+const sel=shuffle(P.slice()).slice(0,n);
+const cards=[];
+sel.forEach((p,i)=>{
+cards.push({id:i,label:"Bandiera: "+p[1],html:'<div class="flag">'+p[0]+'</div><div class="name">'+p[1]+'</div>'});
+cards.push({id:i,label:"Moneta: "+p[3]+" ("+p[2]+")",html:'<div class="sym">'+p[2]+'</div><div class="cur">'+p[3]+'</div>'});
+});
+shuffle(cards);
+grid.innerHTML="";
+cards.forEach(c=>{
+const b=document.createElement("button");b.className="card";b.dataset.id=c.id;b.dataset.label=c.label;
+lab(b,"Carta coperta");
+b.innerHTML='<div class="in"><div class="f back">?</div><div class="f front">'+c.html+'</div></div>';
+b.addEventListener("click",()=>flip(b));
+grid.appendChild(b);
+});
+fit();
+}
+function flip(b){
+if(lock||b.classList.contains("on")||b.classList.contains("done"))return;
+if(!timer){t0=Date.now();timer=setInterval(()=>{tmE.textContent=fmt(Math.floor((Date.now()-t0)/1000))},500)}
+b.classList.add("on");lab(b,b.dataset.label);
+if(!first){first=b;return}
+moves++;mvE.textContent=moves;
+if(first.dataset.id===b.dataset.id){
+first.classList.add("done");b.classList.add("done");
+lab(first,"Coppia trovata: "+first.dataset.label);lab(b,"Coppia trovata: "+b.dataset.label);
+first=null;found++;
+if(found===total)win();
+}else{
+lock=true;const a=first;first=null;
+setTimeout(()=>{a.classList.remove("on");b.classList.remove("on");lab(a,"Carta coperta");lab(b,"Carta coperta");lock=false},950);
+}
+}
+function win(){
+clearInterval(timer);timer=null;
+const s=Math.floor((Date.now()-t0)/1000);
+let extra="";
+if(!best[total]||moves<best[total]){best[total]=moves;extra=" Nuovo record!";bestE.textContent=moves+" mosse";try{localStorage.setItem(RK,JSON.stringify(best))}catch(e){}}
+msg.innerHTML="<b>Complimenti!</b> Hai completato la partita in "+moves+" mosse e "+fmt(s)+"."+extra;
+msg.className="msg show";msg.scrollIntoView({block:"nearest",behavior:"smooth"});
+}
+document.getElementById("new").addEventListener("click",start);
+lvl.addEventListener("change",start);
+start();
+</script>
+</body>
+</html>
