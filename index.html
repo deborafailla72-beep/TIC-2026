@@ -54,7 +54,7 @@ tfoot td{font-weight:700;background:var(--acc2)}
 body{background:linear-gradient(180deg,#bfe6ff 0,#fff4d6 55%,#ffe0ec 100%) fixed}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) body{background:linear-gradient(180deg,#14214d,#2a1d4a 60%,#3a1f3d) fixed}}
 :root[data-theme="dark"] body{background:linear-gradient(180deg,#14214d,#2a1d4a 60%,#3a1f3d) fixed}
-h1.rainbow{font-size:1.9rem;background:linear-gradient(90deg,#ff5f6d,#ffb347,#4cc38a,#3b82f6,#a855f7);-webkit-background-clip:text;background-clip:text;color:transparent}
+h1.rainbow{font-size:1.9rem}h1.rainbow span{background:linear-gradient(90deg,#ff5f6d,#ffb347,#4cc38a,#3b82f6,#a855f7);-webkit-background-clip:text;background-clip:text;color:transparent}
 .card{border-radius:18px;box-shadow:0 4px 0 rgba(0,0,0,.07)}
 button:not(.sec){background:linear-gradient(135deg,#7a5cff,#ff5fa2);color:#fff!important;box-shadow:0 3px 0 rgba(0,0,0,.2)}
 #field{background:radial-gradient(circle at 18% 20%,#fff 0 24px,transparent 25px),radial-gradient(circle at 24% 20%,#fff 0 30px,transparent 31px),radial-gradient(circle at 58% 34%,#fff 0 18px,transparent 19px),radial-gradient(circle at 63% 34%,#fff 0 24px,transparent 25px),linear-gradient(180deg,var(--sky1),var(--sky2) 85%);border-color:#7cc4ff;border-width:3px}
@@ -102,11 +102,15 @@ td:nth-child(2){white-space:normal;min-width:170px;max-width:340px}
 .donly{display:none!important}
 #cap{resize:none;min-height:96px;line-height:1.4}
 #play.lvf #cap{height:auto}
+#rview{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;gap:8px;padding:max(12px,env(safe-area-inset-top)) 12px max(12px,env(safe-area-inset-bottom));background:rgba(20,24,40,.6)}
+#rview[hidden]{display:none}
+#rview .act{justify-content:flex-end}
+#rview iframe{flex:1;width:100%;border:0;border-radius:14px;background:#fff}
 </style>
 </head>
 <body>
 <main>
-<h1 class="rainbow">⌨️ Pioggia di lettere 🌈</h1>
+<h1 class="rainbow">⌨️ <span>Pioggia di lettere</span> 🌈</h1>
 <p class="sub">Fai scoppiare i palloncini colorati digitando le lettere giuste e costruisci la parola! Pronti, partenza, divertiti! 🎈</p>
 
 <section id="setup">
@@ -128,7 +132,7 @@ td:nth-child(2){white-space:normal;min-width:170px;max-width:340px}
   <p class="msg" id="jmsg"></p><p class="hint" id="histsum"></p>
  </div>
  <div class="card"><b>Come funziona</b>
-  <small><br>Le lettere cadono una dopo l’altra: scrivi sempre la prossima lettera della parola. Gli errori si contano e non si può cancellare né tornare indietro. Allo scadere del timer compare il report con le medie, che si può salvare e scaricare.</small></div>
+  <small><br>Le lettere cadono una dopo l’altra: scrivi sempre la prossima lettera della parola. Gli errori si contano e non si può cancellare né tornare indietro. Allo scadere del timer compare il report con le medie, che si può salvare, scaricare e aprire nel browser.</small></div>
 </section>
 
 <section id="play" hidden>
@@ -147,9 +151,10 @@ td:nth-child(2){white-space:normal;min-width:170px;max-width:340px}
  <div class="grid" id="kpis"></div>
  <div class="card" id="ftextcard" hidden><b>Il tuo testo</b><p id="ftextout" style="white-space:pre-wrap;margin:8px 0 0"></p></div>
  <div class="card tw" id="tcard"><table><thead><tr><th>#</th><th>Parola</th><th>Esito</th><th>Tempo (s)</th><th>Errori</th></tr></thead><tbody id="rows"></tbody><tfoot id="foot"></tfoot></table></div>
- <div class="card"><div class="act"><button id="save">Salva e scarica il report</button><button class="sec" id="again">Nuovo esercizio</button></div>
- <p class="msg" id="smsg"></p><textarea id="fallback" readonly hidden></textarea><p class="hint" id="hist"></p></div>
+ <div class="card"><div class="act"><button id="save">Salva, scarica e apri il report</button><button class="sec" id="again">Nuovo esercizio</button></div>
+ <p class="msg" id="smsg"></p><p class="hint" id="hist"></p></div>
 </section>
+<div id="rview" hidden><div class="act"><button type="button" id="rclose">✖ Chiudi il report</button></div><iframe title="Report"></iframe></div>
 </main>
 
 <script>
@@ -173,39 +178,52 @@ let lv0="f";try{lv0=localStorage.getItem("digitazione_livello")||"f"}catch(e){}
 lvSet(lv0);
 function cfgGet(){return{versione:1,nome:$("#name").value.trim(),timer:parseInt($("#dur").value)||60,caduta:parseFloat($("#fall").value)||7,livello:LEVEL,modo:MODE,suoni:$("#snd").checked,parole:$("#words").value.split(LEVEL==="d"?/\n/:/\n|,/).map(w=>w.trim()).filter(Boolean)}}
 function jmsg(t,ok){const m=$("#jmsg");m.textContent=t;m.className="msg "+(ok?"ok":"no")}
-$("#exp").onclick=async()=>{
- const data=JSON.stringify(cfgGet(),null,2);let d=null;
+/* salva un file: usa il download di Claude se la pagina è un artifact, altrimenti il download normale del browser */
+async function saveFile(filename,data,mime){
+ let d=null;
  try{d=window.claude?await window.claude.use("downloads"):null}catch(e){}
- if(!d){jmsg("Il download non è disponibile qui.",0);return}
- try{await d.save({filename:"impostazioni-digitazione.json",data});jmsg("Impostazioni e parole salvate nel file JSON.",1)}
- catch(e){jmsg(e&&e.code==="declined"?"Salvataggio annullato.":"Salvataggio non riuscito.",0)}
+ if(d){await d.save({filename,data});return}
+ const u=URL.createObjectURL(new Blob([data],{type:mime})),a=document.createElement("a");
+ a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(u),1000);
+}
+const KC="digitazione_impostazioni";
+/* applica impostazioni salvate (dal file JSON o da questo browser); false se non sono valide */
+function cfgApply(o){
+ if(!o||!Array.isArray(o.parole)||!o.parole.some(w=>typeof w==="string"&&w.trim()))return false;
+ $("#name").value=typeof o.nome==="string"?o.nome.slice(0,40):"";
+ $("#dur").value=clamp(parseInt(o.timer)||60,10,900);
+ $("#fall").value=clamp(parseFloat(o.caduta)||7,3,30);
+ $("#words").value=o.parole.filter(w=>typeof w==="string"&&w.trim()).map(w=>w.trim()).join("\n");
+ $("#snd").checked=o.suoni!==false;
+ LEVEL=LV[o.livello]?o.livello:"f";$("#setup").classList.toggle("dl",LEVEL==="d");modeSet("game");
+ document.querySelectorAll(".lvb").forEach(b=>b.classList.toggle("on",b.dataset.l===LEVEL));
+ $("#lvtxt").textContent=LV[LEVEL].txt+" Puoi comunque modificare velocità e parole qui sotto.";
+ durTxt();$("#err").textContent="";
+ return true;
+}
+/* Salva: ricorda le impostazioni in questo browser e le scarica anche nel file JSON */
+$("#exp").onclick=async()=>{
+ const cfg=cfgGet(),data=JSON.stringify(cfg,null,2);let kept=false;
+ try{localStorage.setItem(KC,data);localStorage.setItem("digitazione_livello",cfg.livello);localStorage.setItem("digitazione_timer",clamp(cfg.timer,10,900));kept=true}catch(e){}
+ try{await saveFile("impostazioni-digitazione.json",data,"application/json");jmsg(kept?"Impostazioni salvate in questo browser e scaricate nel file JSON.":"Impostazioni scaricate nel file JSON.",1)}
+ catch(e){jmsg((kept?"Impostazioni salvate in questo browser, ma ":"")+(e&&e.code==="declined"?"il download è stato annullato.":"il download non è riuscito."),kept)}
 };
 $("#imp").onclick=()=>$("#jf").click();
 $("#jf").onchange=e=>{
- const f=e.target.files[0];if(!f)return;
+ const f=e.target.files[0];e.target.value="";if(!f)return;
  const r=new FileReader();
  r.onerror=()=>jmsg("Impossibile leggere il file.",0);
  r.onload=()=>{
-  try{
-   const o=JSON.parse(r.result);
-   if(!o||!Array.isArray(o.parole)||!o.parole.some(w=>typeof w==="string"&&w.trim()))throw 0;
-   $("#name").value=typeof o.nome==="string"?o.nome.slice(0,40):"";
-   $("#dur").value=clamp(parseInt(o.timer)||60,10,900);
-   $("#fall").value=clamp(parseFloat(o.caduta)||7,3,30);
-   $("#words").value=o.parole.filter(w=>typeof w==="string"&&w.trim()).map(w=>w.trim()).join("\n");
-   $("#snd").checked=o.suoni!==false;
-   LEVEL=LV[o.livello]?o.livello:"f";$("#setup").classList.toggle("dl",LEVEL==="d");modeSet("game");
-   document.querySelectorAll(".lvb").forEach(b=>b.classList.toggle("on",b.dataset.l===LEVEL));
-   $("#lvtxt").textContent=LV[LEVEL].txt+" Puoi comunque modificare velocità e parole qui sotto.";
-   durTxt();$("#err").textContent="";
-   jmsg("Impostazioni caricate dal file.",1);
-  }catch(x){jmsg("File non valido: scegli un JSON salvato da questo esercizio.",0)}
-  e.target.value="";
+  let ok=false;try{ok=cfgApply(JSON.parse(r.result))}catch(x){}
+  jmsg(ok?"Impostazioni caricate dal file.":"File non valido: scegli un JSON salvato da questo esercizio.",ok);
  };
  r.readAsText(f);
 };
 let MODE="game";
 function modeSet(m){MODE=m;$("#setup").classList.toggle("free",m==="free");document.querySelectorAll(".mdb").forEach(b=>b.classList.toggle("on",b.dataset.m===m))}
+/* all'apertura: riprende le impostazioni salvate con "Salva"; il timer resta l'ultimo usato */
+try{const sv=JSON.parse(localStorage.getItem(KC));if(sv&&cfgApply(sv)){const t=localStorage.getItem("digitazione_timer");if(t)$("#dur").value=t;durTxt()}}catch(e){}
 document.querySelectorAll(".mdb").forEach(b=>b.onclick=()=>modeSet(b.dataset.m));
 function startFree(){
  const dur=clamp(parseInt($("#dur").value)||60,10,900),t0=performance.now();
@@ -243,13 +261,9 @@ function renderFree(){
  $("#tcard").hidden=true;$("#ftextcard").hidden=false;
  $("#ftextout").textContent=r.text||"(nessun testo scritto)";
  $("#hist").textContent=histLine();
- $("#smsg").textContent="";$("#smsg").className="msg";$("#fallback").hidden=true;
+ $("#smsg").textContent="";$("#smsg").className="msg";
  $("#again").textContent="Nuovo esercizio";
  show("report");window.scrollTo(0,0);
-}
-function csvFree(){
- const r=S.rep,q=x=>'"'+String(x).replace(/"/g,'""')+'"';
- return [["Report digitazione – Testo libero"],["Alunno",r.name],["Data",r.date.toLocaleString("it-IT")],["Timer (s)",r.dur],["Parole scritte",r.words],["Caratteri",r.letters],["Parole/minuto",f1(r.wpm)],["Tasti premuti",r.keys],["Caratteri cancellati",r.del],["Caratteri tenuti (%)",f1(r.acc)],[],["Testo"],[r.text]].map(a=>a.map(q).join(";")).join("\r\n");
 }
 let stopT=null;
 function resetStop(){clearTimeout(stopT);const b=$("#stop");delete b.dataset.arm;b.textContent="⏹️ Ferma"}
@@ -379,33 +393,66 @@ function renderReport(){if(S.rep.mode==="free")return renderFree();$("#tcard").h
  $("#rows").innerHTML=S.log.map((x,i)=>"<tr><td>"+(i+1)+"</td><td>"+esc(x.w)+"</td><td class='"+(x.res==="ok"?"ok":"no")+"'>"+(x.res==="ok"?"completata":x.res)+"</td><td>"+(x.ms==null?"–":f2(x.ms/1000))+"</td><td>"+x.errs+"</td></tr>").join("")||"<tr><td colspan=5>Nessuna parola tentata.</td></tr>";
  $("#foot").innerHTML="<tr><td colspan=3>Media</td><td>"+f2(r.avgWord)+"</td><td>"+f2(r.avgErr)+"</td></tr>";
  $("#hist").textContent=histLine();
- $("#smsg").textContent="";$("#smsg").className="msg";$("#fallback").hidden=true;
+ $("#smsg").textContent="";$("#smsg").className="msg";
  $("#again").textContent="Nuovo esercizio";
  show("report");window.scrollTo(0,0);
 }
 
-function csv(){if(S.rep.mode==="free")return csvFree();
- const r=S.rep,q=x=>'"'+String(x).replace(/"/g,'""')+'"',L=[];
- L.push(["Report digitazione – Pioggia di lettere"].map(q).join(";"));
- [["Alunno",r.name],["Livello",LVN[r.level]],["Data",r.date.toLocaleString("it-IT")],["Timer (s)",r.dur],["Caduta parola (s)",f1(r.fall)],["Parole completate",r.words],["Parole mancate",r.missed],["Lettere corrette",r.letters],["Errori",r.errs],["Precisione (%)",f1(r.acc)],["Parole/minuto",f1(r.wpm)],["Media tempo per parola (s)",f2(r.avgWord)],["Media tempo per lettera (s)",f2(r.avgLetter)]].forEach(x=>L.push(x.map(q).join(";")));
- L.push("");L.push(["N.","Parola","Esito","Tempo (s)","Errori"].map(q).join(";"));
- S.log.forEach((x,i)=>L.push([i+1,x.w,x.res,x.ms==null?"":f2(x.ms/1000),x.errs].map(q).join(";")));
- L.push(["","Media","",f2(r.avgWord),f2(r.avgErr)].map(q).join(";"));
- return L.join("\r\n");
+/* report scaricabile: pagina HTML autonoma, uguale al report a schermo e pronta da stampare */
+function htmlReport(){
+ const r=S.rep,free=r.mode==="free",when=r.date.toLocaleString("it-IT");
+ const info=[["Alunno",r.name],["Data",when],["Esercizio",free?"Testo libero":"Pioggia di lettere"]];
+ if(!free)info.push(["Livello",LVN[r.level]]);
+ info.push(S.early?["Interrotto dopo",r.dur+" s"]:["Timer",r.dur+" s"]);
+ if(!free)info.push(["Caduta parola",f1(r.fall)+" s"]);
+ const body=free
+  ?"<section class='card'><h2>Il testo scritto</h2><p class='txt'>"+(r.text?esc(r.text):"<i>(nessun testo scritto)</i>")+"</p></section>"
+  :"<section class='card tw'><h2>Parola per parola</h2><table><thead><tr><th>#</th><th>Parola</th><th>Esito</th><th>Tempo (s)</th><th>Errori</th></tr></thead><tbody>"+$("#rows").innerHTML+"</tbody><tfoot>"+$("#foot").innerHTML+"</tfoot></table></section>";
+ return "<!DOCTYPE html>\n<html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><meta name='color-scheme' content='light'>"+
+ "<title>Report di "+esc(r.name)+" – "+esc(when)+"</title><style>"+
+ "body{margin:0;background:#f6f4ef;color:#1d2433;font:16px/1.5 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}"+
+ "main{max-width:760px;margin:0 auto;padding:24px 16px 40px}"+
+ "h1{font-size:1.6rem;margin:0}h1 span{background:linear-gradient(90deg,#ff5f6d,#ffb347,#4cc38a,#3b82f6,#a855f7);-webkit-background-clip:text;background-clip:text;color:transparent}"+
+ "h2{font-size:1.05rem;margin:0 0 10px}"+
+ ".card{background:#fff;border:1px solid #e3dfd5;border-radius:14px;padding:18px;margin-bottom:14px}"+
+ ".cheer{font-size:1.1rem;font-weight:700;margin:6px 0 0}"+
+ "dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;margin:14px 0 0}dt{color:#667085}dd{margin:0;font-weight:600}"+
+ ".grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px}"+
+ ".k{background:#fff;border:1px solid #e3dfd5;border-top:5px solid #4cc38a;border-radius:12px;padding:12px}"+
+ ".k em{float:right;font-style:normal;font-size:1.5rem}.k b{display:block;font-size:1.5rem}.k span{color:#667085;font-size:.82rem}"+
+ ".c1{border-top-color:#ff6b6b}.c2{border-top-color:#3b82f6}.c3{border-top-color:#f59e0b}.c4{border-top-color:#a855f7}.c5{border-top-color:#06b6d4}"+
+ ".tw{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:.92rem}"+
+ "th,td{padding:7px 10px;text-align:left;border-bottom:1px solid #e3dfd5}td:nth-child(2){min-width:150px}"+
+ "tfoot td{font-weight:700;background:#e8eeff}.ok{color:#16915c;font-weight:600}.no{color:#d64545;font-weight:600}"+
+ ".txt{white-space:pre-wrap;margin:0}footer{color:#667085;font-size:.8rem;text-align:center}"+
+ "@media print{body{background:#fff}main{padding:0}.card,.k,tr{break-inside:avoid}}"+
+ "</style></head><body><main>"+
+ "<section class='card'><h1>📊 <span>Report di digitazione</span></h1><p class='cheer'>"+esc($("#rmsg").textContent)+"</p><dl>"+
+ info.map(x=>"<dt>"+x[0]+"</dt><dd>"+esc(x[1])+"</dd>").join("")+"</dl></section>"+
+ "<section class='grid'>"+$("#kpis").innerHTML+"</section>"+body+
+ "<footer>Pioggia di lettere – esercizio di digitazione</footer></main></body></html>";
 }
 
+/* mostra il report: in una nuova scheda (va aperta subito al clic, altrimenti il browser la blocca come popup);
+   se la scheda è bloccata, lo mostra sopra la pagina */
+function viewReport(html){
+ let w=null;
+ try{w=window.open("","_blank");if(w){w.document.open();w.document.write(html);w.document.close();return true}}
+ catch(e){try{if(w)w.close()}catch(_){}}
+ const v=$("#rview");v.querySelector("iframe").srcdoc=html;v.hidden=false;return false;
+}
+$("#rclose").onclick=()=>{$("#rview").hidden=true};
 $("#save").onclick=async()=>{
- const r=S.rep,m=$("#smsg");
+ const r=S.rep,m=$("#smsg"),html=htmlReport();
  if(!S.saved){
   try{const h=readHist();h.push({name:r.name,date:r.date.toISOString(),words:r.words,acc:r.acc,wpm:r.wpm,avgWord:r.avgWord});localStorage.setItem(K,JSON.stringify(h.slice(-100)));S.saved=true}catch(e){}
  }
  $("#hist").textContent=histLine();
- const data="\ufeff"+csv(),name="report-digitazione-"+r.name.replace(/[^\w]+/g,"-")+"-"+r.date.toISOString().slice(0,10)+".csv";
- let d=null;
- try{d=window.claude?await window.claude.use("downloads"):null}catch(e){}
- if(!d){m.textContent="Il download non è disponibile qui: copia il testo qui sotto e incollalo in un file.";m.className="msg no";const t=$("#fallback");t.value=csv();t.hidden=false;t.select();return}
- try{await d.save({filename:name,data});m.textContent="Report salvato"+(S.saved?" nello storico e":"")+" scaricato.";m.className="msg ok"}
- catch(e){m.textContent=e&&e.code==="declined"?"Download annullato. Premi di nuovo per scaricare.":"Download non riuscito.";m.className="msg no"}
+ const name="report-digitazione-"+r.name.replace(/[^\w]+/g,"-")+"-"+r.date.toISOString().slice(0,10)+".html";
+ /* prima parte il download (subito, mentre questa scheda è ancora in primo piano), poi si apre il report */
+ const dl=saveFile(name,html,"text/html"),vis=viewReport(html)?" Il report è aperto in una nuova scheda.":"";
+ try{await dl;m.textContent=(S.saved?"Report salvato nello storico e scaricato.":"Report scaricato.")+vis;m.className="msg ok"}
+ catch(e){m.textContent=(e&&e.code==="declined"?"Download annullato. Premi di nuovo per scaricare.":"Download non riuscito.")+vis;m.className="msg no"}
 };
 
 $("#again").onclick=()=>{
